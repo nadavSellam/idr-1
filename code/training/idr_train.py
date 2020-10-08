@@ -7,6 +7,8 @@ import torch
 import utils.general as utils
 import utils.plots as plt
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class IDRTrainRunner():
     def __init__(self,**kwargs):
         torch.set_default_dtype(torch.float32)
@@ -210,15 +212,15 @@ class IDRTrainRunner():
                 self.train_dataset.change_sampling_idx(-1)
                 indices, model_input, ground_truth = next(iter(self.plot_dataloader))
 
-                model_input["intrinsics"] = model_input["intrinsics"].cuda()
-                model_input["uv"] = model_input["uv"].cuda()
-                model_input["object_mask"] = model_input["object_mask"].cuda()
+                model_input["intrinsics"] = model_input["intrinsics"].to(device)
+                model_input["uv"] = model_input["uv"].to(device)
+                model_input["object_mask"] = model_input["object_mask"].to(device)
 
                 if self.train_cameras:
-                    pose_input = self.pose_vecs(indices.cuda())
+                    pose_input = self.pose_vecs(indices.to(device))
                     model_input['pose'] = pose_input
                 else:
-                    model_input['pose'] = model_input['pose'].cuda()
+                    model_input['pose'] = model_input['pose'].to(device)
 
                 split = utils.split_input(model_input, self.total_pixels)
                 res = []

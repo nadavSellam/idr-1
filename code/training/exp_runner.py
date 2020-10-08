@@ -2,7 +2,6 @@ import sys
 sys.path.append('../code')
 import argparse
 import GPUtil
-
 from training.idr_train import IDRTrainRunner
 
 if __name__ == '__main__':
@@ -23,9 +22,10 @@ if __name__ == '__main__':
 
     if opt.gpu == "auto":
         deviceIDs = GPUtil.getAvailable(order='memory', limit=1, maxLoad=0.5, maxMemory=0.5, includeNan=False, excludeID=[], excludeUUID=[])
-        gpu = deviceIDs[0]
+        # gpu = deviceIDs[0]
     else:
         gpu = opt.gpu
+    gpu = None
 
     trainrunner = IDRTrainRunner(conf=opt.conf,
                                  batch_size=opt.batch_size,
