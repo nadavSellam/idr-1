@@ -5,6 +5,8 @@ import cv2
 import torch
 from torch.nn import functional as F
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 def load_rgb(path):
     img = imageio.imread(path)
     img = skimage.img_as_float32(img)
@@ -49,7 +51,7 @@ def get_camera_params(uv, pose, intrinsics):
     if pose.shape[1] == 7: #In case of quaternion vector representation
         cam_loc = pose[:, 4:]
         R = quat_to_rot(pose[:,:4])
-        p = torch.eye(4).repeat(pose.shape[0],1,1).cuda().float()
+        p = torch.eye(4).repeat(pose.shape[0],1,1).to(device).float()
         p[:, :3, :3] = R
         p[:, :3, 3] = cam_loc
     else: # In case of pose matrix representation
@@ -58,7 +60,7 @@ def get_camera_params(uv, pose, intrinsics):
 
     batch_size, num_samples, _ = uv.shape
 
-    depth = torch.ones((batch_size, num_samples)).cuda()
+    depth = torch.ones((batch_size, num_samples)).to(device)
     x_cam = uv[:, :, 0].view(batch_size, -1)
     y_cam = uv[:, :, 1].view(batch_size, -1)
     z_cam = depth.view(batch_size, -1)
@@ -86,7 +88,7 @@ def get_camera_for_plot(pose):
 
 def lift(x, y, z, intrinsics):
     # parse intrinsics
-    intrinsics = intrinsics.cuda()
+    intrinsics = intrinsics.to(device)
     fx = intrinsics[:, 0, 0]
     fy = intrinsics[:, 1, 1]
     cx = intrinsics[:, 0, 2]
@@ -97,12 +99,12 @@ def lift(x, y, z, intrinsics):
     y_lift = (y - cy.unsqueeze(-1)) / fy.unsqueeze(-1) * z
 
     # homogeneous
-    return torch.stack((x_lift, y_lift, z, torch.ones_like(z).cuda()), dim=-1)
+    return torch.stack((x_lift, y_lift, z, torch.ones_like(z).to(device)), dim=-1)
 
 def quat_to_rot(q):
     batch_size, _ = q.shape
     q = F.normalize(q, dim=1)
-    R = torch.ones((batch_size, 3,3)).cuda()
+    R = torch.ones((batch_size, 3,3)).to(device)
     qr=q[:,0]
     qi = q[:, 1]
     qj = q[:, 2]
@@ -120,7 +122,7 @@ def quat_to_rot(q):
 
 def rot_to_quat(R):
     batch_size, _,_ = R.shape
-    q = torch.ones((batch_size, 4)).cuda()
+    q = torch.ones((batch_size, 4)).to(device)
 
     R00 = R[:, 0,0]
     R01 = R[:, 0, 1]
@@ -151,8 +153,8 @@ def get_sphere_intersection(cam_loc, ray_directions, r = 1.0):
     under_sqrt = under_sqrt.reshape(-1)
     mask_intersect = under_sqrt > 0
 
-    sphere_intersections = torch.zeros(n_imgs * n_pix, 2).cuda().float()
-    sphere_intersections[mask_intersect] = torch.sqrt(under_sqrt[mask_intersect]).unsqueeze(-1) * torch.Tensor([-1, 1]).cuda().float()
+    sphere_intersections = torch.zeros(n_imgs * n_pix, 2).to(device).float()
+    sphere_intersections[mask_intersect] = torch.sqrt(under_sqrt[mask_intersect]).unsqueeze(-1) * torch.Tensor([-1, 1]).to(device).float()
     sphere_intersections[mask_intersect] -= ray_cam_dot.reshape(-1)[mask_intersect].unsqueeze(-1)
 
     sphere_intersections = sphere_intersections.reshape(n_imgs, n_pix, 2)
@@ -167,11 +169,11 @@ def get_depth(points, pose):
     if pose.shape[1] == 7:  # In case of quaternion vector representation
         cam_loc = pose[:, 4:]
         R = quat_to_rot(pose[:, :4])
-        pose = torch.eye(4).unsqueeze(0).repeat(batch_size, 1, 1).cuda().float()
+        pose = torch.eye(4).unsqueeze(0).repeat(batch_size, 1, 1).to(device).float()
         pose[:, :3, 3] = cam_loc
         pose[:, :3, :3] = R
 
-    points_hom = torch.cat((points, torch.ones((batch_size, num_samples, 1)).cuda()), dim=2)
+    points_hom = torch.cat((points, torch.ones((batch_size, num_samples, 1)).to(device)), dim=2)
 
     # permute for batch matrix product
     points_hom = points_hom.permute(0, 2, 1)

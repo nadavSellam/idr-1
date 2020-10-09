@@ -100,7 +100,7 @@ class IDRTrainRunner():
 
         self.model = utils.get_class(self.conf.get_string('train.model_class'))(conf=self.conf.get_config('model'))
         if torch.cuda.is_available():
-            self.model.cuda()
+            self.model.to(device)
 
         self.loss = utils.get_class(self.conf.get_string('train.loss_class'))(**self.conf.get_config('loss'))
 
@@ -113,7 +113,7 @@ class IDRTrainRunner():
         # settings for camera optimization
         if self.train_cameras:
             num_images = len(self.train_dataset)
-            self.pose_vecs = torch.nn.Embedding(num_images, 7, sparse=True).cuda()
+            self.pose_vecs = torch.nn.Embedding(num_images, 7, sparse=True).to(device)
             self.pose_vecs.weight.data.copy_(self.train_dataset.get_pose_init())
 
             self.optimizer_cam = torch.optim.SparseAdam(self.pose_vecs.parameters(), self.conf.get_float('train.learning_rate_cam'))
@@ -255,15 +255,15 @@ class IDRTrainRunner():
 
             for data_index, (indices, model_input, ground_truth) in enumerate(self.train_dataloader):
 
-                model_input["intrinsics"] = model_input["intrinsics"].cuda()
-                model_input["uv"] = model_input["uv"].cuda()
-                model_input["object_mask"] = model_input["object_mask"].cuda()
+                model_input["intrinsics"] = model_input["intrinsics"].to(device)
+                model_input["uv"] = model_input["uv"].to(device)
+                model_input["object_mask"] = model_input["object_mask"].to(device)
 
                 if self.train_cameras:
-                    pose_input = self.pose_vecs(indices.cuda())
+                    pose_input = self.pose_vecs(indices.to(device))
                     model_input['pose'] = pose_input
                 else:
-                    model_input['pose'] = model_input['pose'].cuda()
+                    model_input['pose'] = model_input['pose'].to(device)
 
                 model_outputs = self.model(model_input)
                 loss_output = self.loss(model_outputs, ground_truth)

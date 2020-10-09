@@ -5,6 +5,8 @@ import numpy as np
 import utils.general as utils
 from utils import rend_util
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class SceneDataset(torch.utils.data.Dataset):
     """Dataset for a class of objects, where each datapoint is a SceneInstanceDataset."""
 
@@ -146,7 +148,7 @@ class SceneDataset(torch.utils.data.Dataset):
             P = P[:3, :4]
             _, pose = rend_util.load_K_Rt_from_P(None, P)
             init_pose.append(pose)
-        init_pose = torch.cat([torch.Tensor(pose).float().unsqueeze(0) for pose in init_pose], 0).cuda()
+        init_pose = torch.cat([torch.Tensor(pose).float().unsqueeze(0) for pose in init_pose], 0).to(device)
         init_quat = rend_util.rot_to_quat(init_pose[:, :3, :3])
         init_quat = torch.cat([init_quat, init_pose[:, :3, 3]], 1)
 

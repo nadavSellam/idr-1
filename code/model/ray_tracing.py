@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 from utils import rend_util
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
 class RayTracing(nn.Module):
     def __init__(
             self,
@@ -41,9 +44,9 @@ class RayTracing(nn.Module):
 
         # The non convergent rays should be handled by the sampler
         sampler_mask = unfinished_mask_start
-        sampler_net_obj_mask = torch.zeros_like(sampler_mask).bool().cuda()
+        sampler_net_obj_mask = torch.zeros_like(sampler_mask).bool().to(device)
         if sampler_mask.sum() > 0:
-            sampler_min_max = torch.zeros((batch_size, num_pixels, 2)).cuda()
+            sampler_min_max = torch.zeros((batch_size, num_pixels, 2)).to(device)
             sampler_min_max.reshape(-1, 2)[sampler_mask, 0] = acc_start_dis[sampler_mask]
             sampler_min_max.reshape(-1, 2)[sampler_mask, 1] = acc_end_dis[sampler_mask]
 
@@ -105,15 +108,15 @@ class RayTracing(nn.Module):
         unfinished_mask_end = mask_intersect.reshape(-1).clone()
 
         # Initialize start current points
-        curr_start_points = torch.zeros(batch_size * num_pixels, 3).cuda().float()
+        curr_start_points = torch.zeros(batch_size * num_pixels, 3).to(device).float()
         curr_start_points[unfinished_mask_start] = sphere_intersections_points[:,:,0,:].reshape(-1,3)[unfinished_mask_start]
-        acc_start_dis = torch.zeros(batch_size * num_pixels).cuda().float()
+        acc_start_dis = torch.zeros(batch_size * num_pixels).to(device).float()
         acc_start_dis[unfinished_mask_start] = sphere_intersections.reshape(-1,2)[unfinished_mask_start,0]
 
         # Initialize end current points
-        curr_end_points = torch.zeros(batch_size * num_pixels, 3).cuda().float()
+        curr_end_points = torch.zeros(batch_size * num_pixels, 3).to(device).float()
         curr_end_points[unfinished_mask_end] = sphere_intersections_points[:,:,1,:].reshape(-1,3)[unfinished_mask_end]
-        acc_end_dis = torch.zeros(batch_size * num_pixels).cuda().float()
+        acc_end_dis = torch.zeros(batch_size * num_pixels).to(device).float()
         acc_end_dis[unfinished_mask_end] = sphere_intersections.reshape(-1,2)[unfinished_mask_end,1]
 
         # Initizliae min and max depth
@@ -123,19 +126,19 @@ class RayTracing(nn.Module):
         # Iterate on the rays (from both sides) till finding a surface
         iters = 0
 
-        next_sdf_start = torch.zeros_like(acc_start_dis).cuda()
+        next_sdf_start = torch.zeros_like(acc_start_dis).to(device)
         next_sdf_start[unfinished_mask_start] = sdf(curr_start_points[unfinished_mask_start])
 
-        next_sdf_end = torch.zeros_like(acc_end_dis).cuda()
+        next_sdf_end = torch.zeros_like(acc_end_dis).to(device)
         next_sdf_end[unfinished_mask_end] = sdf(curr_end_points[unfinished_mask_end])
 
         while True:
             # Update sdf
-            curr_sdf_start = torch.zeros_like(acc_start_dis).cuda()
+            curr_sdf_start = torch.zeros_like(acc_start_dis).to(device)
             curr_sdf_start[unfinished_mask_start] = next_sdf_start[unfinished_mask_start]
             curr_sdf_start[curr_sdf_start <= self.sdf_threshold] = 0
 
-            curr_sdf_end = torch.zeros_like(acc_end_dis).cuda()
+            curr_sdf_end = torch.zeros_like(acc_end_dis).to(device)
             curr_sdf_end[unfinished_mask_end] = next_sdf_end[unfinished_mask_end]
             curr_sdf_end[curr_sdf_end <= self.sdf_threshold] = 0
 
@@ -157,10 +160,10 @@ class RayTracing(nn.Module):
             curr_end_points = (cam_loc.unsqueeze(1) + acc_end_dis.reshape(batch_size, num_pixels, 1) * ray_directions).reshape(-1, 3)
 
             # Fix points which wrongly crossed the surface
-            next_sdf_start = torch.zeros_like(acc_start_dis).cuda()
+            next_sdf_start = torch.zeros_like(acc_start_dis).to(device)
             next_sdf_start[unfinished_mask_start] = sdf(curr_start_points[unfinished_mask_start])
 
-            next_sdf_end = torch.zeros_like(acc_end_dis).cuda()
+            next_sdf_end = torch.zeros_like(acc_end_dis).to(device)
             next_sdf_end[unfinished_mask_end] = sdf(curr_end_points[unfinished_mask_end])
 
             not_projected_start = next_sdf_start < 0
@@ -193,10 +196,10 @@ class RayTracing(nn.Module):
 
         batch_size, num_pixels, _ = ray_directions.shape
         n_total_pxl = batch_size * num_pixels
-        sampler_pts = torch.zeros(n_total_pxl, 3).cuda().float()
-        sampler_dists = torch.zeros(n_total_pxl).cuda().float()
+        sampler_pts = torch.zeros(n_total_pxl, 3).to(device).float()
+        sampler_dists = torch.zeros(n_total_pxl).to(device).float()
 
-        intervals_dist = torch.linspace(0, 1, steps=self.n_steps).cuda().view(1, 1, -1)
+        intervals_dist = torch.linspace(0, 1, steps=self.n_steps).to(device).view(1, 1, -1)
 
         pts_intervals = sampler_min_max[:, :, 0].unsqueeze(-1) + intervals_dist * (sampler_min_max[:, :, 1] - sampler_min_max[:, :, 0]).unsqueeze(-1)
         points = cam_loc.reshape(batch_size, 1, 1, 3) + pts_intervals.unsqueeze(-1) * ray_directions.unsqueeze(2)
@@ -211,7 +214,7 @@ class RayTracing(nn.Module):
             sdf_val_all.append(sdf(pnts))
         sdf_val = torch.cat(sdf_val_all).reshape(-1, self.n_steps)
 
-        tmp = torch.sign(sdf_val) * torch.arange(self.n_steps, 0, -1).cuda().float().reshape((1, self.n_steps))  # Force argmin to return the first min value
+        tmp = torch.sign(sdf_val) * torch.arange(self.n_steps, 0, -1).to(device).float().reshape((1, self.n_steps))  # Force argmin to return the first min value
         sampler_pts_ind = torch.argmin(tmp, -1)
         sampler_pts[mask_intersect_idx] = points[torch.arange(points.shape[0]), sampler_pts_ind, :]
         sampler_dists[mask_intersect_idx] = pts_intervals[torch.arange(pts_intervals.shape[0]), sampler_pts_ind]
@@ -276,8 +279,8 @@ class RayTracing(nn.Module):
         n_mask_points = mask.sum()
 
         n = self.n_steps
-        # steps = torch.linspace(0.0, 1.0,n).cuda()
-        steps = torch.empty(n).uniform_(0.0, 1.0).cuda()
+        # steps = torch.linspace(0.0, 1.0,n).to(device)
+        steps = torch.empty(n).uniform_(0.0, 1.0).to(device)
         mask_max_dis = max_dis[mask].unsqueeze(-1)
         mask_min_dis = min_dis[mask].unsqueeze(-1)
         steps = steps.unsqueeze(0).repeat(n_mask_points, 1) * (mask_max_dis - mask_min_dis) + mask_min_dis

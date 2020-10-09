@@ -7,6 +7,8 @@ from model.embedder import *
 from model.ray_tracing import RayTracing
 from model.sample_network import SampleNetwork
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class ImplicitNetwork(nn.Module):
     def __init__(
             self,
@@ -203,7 +205,7 @@ class IDRNetwork(nn.Module):
             # Sample points for the eikonal loss
             eik_bounding_box = self.object_bounding_sphere
             n_eik_points = batch_size * num_pixels // 2
-            eikonal_points = torch.empty(n_eik_points, 3).uniform_(-eik_bounding_box, eik_bounding_box).cuda()
+            eikonal_points = torch.empty(n_eik_points, 3).uniform_(-eik_bounding_box, eik_bounding_box).to(device)
             eikonal_pixel_points = points.clone()
             eikonal_pixel_points = eikonal_pixel_points.detach()
             eikonal_points = torch.cat([eikonal_points, eikonal_pixel_points], 0)
@@ -231,7 +233,7 @@ class IDRNetwork(nn.Module):
 
         view = -ray_dirs[surface_mask]
 
-        rgb_values = torch.ones_like(points).float().cuda()
+        rgb_values = torch.ones_like(points).float().to(device)
         if differentiable_surface_points.shape[0] > 0:
             rgb_values[surface_mask] = self.get_rbg_value(differentiable_surface_points, view)
 
